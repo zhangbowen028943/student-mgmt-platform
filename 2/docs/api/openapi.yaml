@@ -1,0 +1,36 @@
+openapi: 3.0.0
+info:
+  title: 学生管理平台 API
+  version: 0.1.0
+servers:
+  - url: http://localhost:3001
+paths:
+  /api/auth/login:
+    post:
+      summary: 登录
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "200":
+          description: 成功
+  /api/admin/students:
+    get:
+      summary: 学生列表
+      responses:
+        "200":
+          description: 成功
+    post:
+      summary: 创建学生
+      responses:
+        "201":
+          description: 成功
+
