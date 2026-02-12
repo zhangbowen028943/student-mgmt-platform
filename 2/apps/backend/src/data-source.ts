@@ -12,6 +12,7 @@ import { Assignment } from './entities/Assignment';
 import { TokenBlacklist } from './entities/TokenBlacklist';
 import { AuditLog } from './entities/AuditLog';
 import { ChangeHistory } from './entities/ChangeHistory';
+import { StudentCapability } from './entities/StudentCapability';
 
 export const AppDataSource = new DataSource({
   type: 'postgres',
@@ -23,9 +24,8 @@ export const AppDataSource = new DataSource({
   synchronize: true,
   logging: false,
   entities: [
-    User, Role, Student, Course, Enrollment, Grade, Attendance, Assignment, TokenBlacklist, AuditLog, ChangeHistory
+    User, Role, Student, Course, Enrollment, Grade, Attendance, Assignment, TokenBlacklist, AuditLog, ChangeHistory, StudentCapability
   ],
   subscribers: [],
   migrations: []
 });
-

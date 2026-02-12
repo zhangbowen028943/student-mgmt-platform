@@ -6,11 +6,17 @@ import { ChangeHistory } from '../../entities/ChangeHistory';
 import { logStudentChanges } from '../../utils/history';
 import multer from 'multer';
 import * as XLSX from 'xlsx';
+import { STUDENT_CAPABILITIES } from '../../constants/studentCapabilities';
+import { StudentCapability } from '../../entities/StudentCapability';
 
 const router = Router();
 const upload = multer();
 
 router.use(authenticate, checkBlacklist, requireRole(['super_admin', 'department_admin']));
+
+router.get('/capabilities/catalog', (_req, res) => {
+  res.json({ items: STUDENT_CAPABILITIES, total: STUDENT_CAPABILITIES.length });
+});
 
 router.get('/:id/history', async (req, res) => {
   const repo = AppDataSource.getRepository(ChangeHistory);
@@ -110,6 +116,81 @@ router.get('/export', async (req, res) => {
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', 'attachment; filename=students.xlsx');
   res.send(buf);
+});
+
+router.get('/:id/capabilities', async (req, res) => {
+  const studentId = Number(req.params.id);
+  const studentRepo = AppDataSource.getRepository(Student);
+  const capabilityRepo = AppDataSource.getRepository(StudentCapability);
+
+  const student = await studentRepo.findOne({ where: { id: studentId } });
+  if (!student) return res.status(404).json({ message: 'Student not found' });
+
+  const records = await capabilityRepo.find({ where: { student: { id: studentId } as any } });
+  const recordMap = new Map(records.map(record => [record.featureKey, record]));
+
+  const items = STUDENT_CAPABILITIES.map(feature => {
+    const record = recordMap.get(feature.key);
+    return {
+      ...feature,
+      enabled: record?.enabled || false,
+      progress: record?.progress || 0,
+      notes: record?.notes || ''
+    };
+  });
+
+  res.json({ studentId, total: items.length, items });
+});
+
+router.put('/:id/capabilities', async (req, res) => {
+  const studentId = Number(req.params.id);
+  const studentRepo = AppDataSource.getRepository(Student);
+  const capabilityRepo = AppDataSource.getRepository(StudentCapability);
+
+  const student = await studentRepo.findOne({ where: { id: studentId } });
+  if (!student) return res.status(404).json({ message: 'Student not found' });
+
+  const payload = Array.isArray(req.body?.items) ? req.body.items : [];
+  const validKeys = new Set(STUDENT_CAPABILITIES.map(item => item.key));
+
+  for (const item of payload) {
+    if (!validKeys.has(item.featureKey)) {
+      return res.status(400).json({ message: `Invalid featureKey: ${item.featureKey}` });
+    }
+  }
+
+  const existing = await capabilityRepo.find({ where: { student: { id: studentId } as any } });
+  const existingMap = new Map(existing.map(item => [item.featureKey, item]));
+
+  for (const item of payload) {
+    const found = existingMap.get(item.featureKey);
+    const progress = Math.max(0, Math.min(100, Number(item.progress) || 0));
+    const notes = item.notes ? String(item.notes).trim().slice(0, 500) : null;
+    if (found) {
+      found.enabled = Boolean(item.enabled);
+      found.progress = progress;
+      found.notes = notes;
+      await capabilityRepo.save(found);
+    } else {
+      const created = capabilityRepo.create({
+        student,
+        featureKey: item.featureKey,
+        enabled: Boolean(item.enabled),
+        progress,
+        notes
+      });
+      await capabilityRepo.save(created);
+    }
+  }
+
+  const summary = await capabilityRepo.find({ where: { student: { id: studentId } as any } });
+  const enabledCount = summary.filter(item => item.enabled).length;
+  res.json({
+    message: 'Capabilities saved',
+    total: STUDENT_CAPABILITIES.length,
+    enabledCount,
+    completionRate: Math.round((enabledCount / STUDENT_CAPABILITIES.length) * 100)
+  });
 });
 
 export default router;
